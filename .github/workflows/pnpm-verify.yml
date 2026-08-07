@@ -9,15 +9,16 @@ on:
       node-version:
         type: string
         required: false
-        # Oldest entry tracks the lowest `engines.node` of the packages being
-        # verified, newest tracks current. Node 16 was dropped: long EOL, and no
-        # package here claims to support it.
-        default: '[18, 22, 24]'
+        # Aliases, not pinned majors, so the matrix follows the Node release train
+        # instead of drifting: `lts/*` is the current LTS and `lts/-1` the one before
+        # it. A package that claims support for something older than `lts/-1` needs
+        # to pass that major in explicitly.
+        default: '["lts/-1", "lts/*"]'
       codecov-node-version:
-        type: number
+        type: string
         required: false
         # Must name an entry of `node-version`, or coverage is never uploaded.
-        default: 24
+        default: 'lts/*'
       codecov-flags:
         type: string
         required: false
@@ -60,3 +61,17 @@ jobs:
         with:
           flags: ${{ inputs.codecov-flags }}
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # A single, stable check for branch protection to require. The matrix contexts carry
+  # the OS and node alias in their names, so pinning those would mean editing protection
+  # every time the matrix moves — which is exactly what tracking `lts/*` makes routine.
+  all-checks:
+    needs: [verify]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: All checks passed
+        run: |
+          if [[ "${{ needs.verify.result }}" != "success" ]]; then
+            exit 1
+          fi
