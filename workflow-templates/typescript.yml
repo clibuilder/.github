@@ -1,21 +1,25 @@
-name: typescript
+name: verify-and-release
 on:
   push:
     branches:
       - $default-branch
   pull_request:
     types: [opened, synchronize]
+
 jobs:
-  build:
-    uses: syncbuddy/.github/.github/workflows/typescript-build.yml@main
+  code:
+    uses: clibuilder/.github/.github/workflows/pnpm-verify.yml@main
     secrets:
-      codacy-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
-  test:
-    uses: syncbuddy/.github/.github/workflows/typescript-test.yml@main
-    needs: build
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Secretless: GITHUB_TOKEN for the version PR, npm trusted publishing (OIDC) to
+  # publish. Register a trusted publisher at npmjs.com/package/<name>/access naming
+  # this repo and this file, or the publish step has no credentials.
   release:
-    if: github.ref == 'refs/heads/main'
-    uses: syncbuddy/.github/.github/workflows/npm-release.yml@main
-    needs: test
-    secrets:
-      npm-token: ${{ secrets.NPM_TOKEN }}
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    uses: clibuilder/.github/.github/workflows/pnpm-release-changeset.yml@main
+    needs: code
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write

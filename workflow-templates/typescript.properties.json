@@ -1,6 +1,6 @@
 {
   "name": "TypeScript project workflow",
-  "description": "TypeScript standard workflow using yarn, and semantic release",
-  "categories": ["TypeScript", "Semantic Release"],
+  "description": "TypeScript workflow using pnpm and changesets, publishing to npm via OIDC trusted publishing",
+  "categories": ["TypeScript", "pnpm", "Changesets"],
   "filePatterns": ["package.json"]
 }
