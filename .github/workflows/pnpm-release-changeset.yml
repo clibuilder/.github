@@ -1,39 +1,75 @@
 name: pnpm-release-changeset
+# Secretless: no CI_GITHUB_TOKEN, no NPM_TOKEN, so nothing to rotate.
+#
+#   - The built-in GITHUB_TOKEN with elevated `permissions` replaces CI_GITHUB_TOKEN.
+#     Trade-off: a PR opened with GITHUB_TOKEN does not trigger `on: pull_request`
+#     workflows, so the "version packages" PR gets no status checks. That is fine for a
+#     mechanical version + changelog bump, since the release job only runs after the
+#     push to the base branch has already been verified. The org must have "Allow
+#     GitHub Actions to create and approve pull requests" enabled.
+#   - npm trusted publishing (OIDC) replaces NPM_TOKEN, and adds provenance
+#     attestations. npm validates the *caller* workflow, so each package needs a
+#     trusted publisher registered at npmjs.com/package/<name>/access naming the
+#     calling repo and the caller workflow's filename — not this file — and the caller
+#     must grant `id-token: write` as well.
 on:
   workflow_call:
     inputs:
+      node-version:
+        type: string
+        required: false
+        # Pinned rather than an `lts/*` alias: alias resolution fetches the
+        # Node versions manifest, which has intermittently returned a
+        # non-array and failed the job with "manifest.filter is not a function".
+        default: '24'
       pnpm-version:
         type: string
         required: false
-        default: 8.14.1
+    outputs:
+      published:
+        description: 'Whether the release was published'
+        value: ${{ jobs.release.outputs.published }}
+
+permissions:
+  # Mints the OIDC token npm exchanges for short-lived publish credentials.
+  id-token: write
+  # Lets changesets/action push the version branch and tags.
+  contents: write
+  # Lets changesets/action open the "version packages" PR.
+  pull-requests: write
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.CI_GITHUB_TOKEN }}
-      - uses: pnpm/action-setup@v2
+
+      # Version comes from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
         with:
-          version: ${{ inputs.pnpm-version }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 20
+          node-version: ${{ inputs.node-version }}
           cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing requires npm 11.5.1+. Node LTS may ship an older npm.
+      - name: Ensure npm supports trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       - name: Install Dependencies
         run: pnpm install
+
       - run: pnpm build
-      - name: update .npmrc with token
-        run: |
-          cat << EOF > "$HOME/.npmrc"
-            //registry.npmjs.org/:_authToken=$NPM_TOKEN
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
@@ -42,9 +78,4 @@ jobs:
           version: pnpm run version
           publish: pnpm run release
         env:
-          GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
-
-      # - name: Send a Slack notification if a publish happens
-      #   if: steps.changesets.outputs.published == 'true'
-      #   # You can do something when a publish happens.
-      #   run: my-slack-bot send-notification --message "A new version of ${GITHUB_REPOSITORY} was published!"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
