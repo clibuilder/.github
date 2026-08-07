@@ -9,13 +9,20 @@ on:
       node-version:
         type: string
         required: false
-        default: '[16, 18, 20]'
-      pnpm-version:
-        type: string
+        # Oldest entry tracks the lowest `engines.node` of the packages being
+        # verified, newest tracks current. Node 16 was dropped: long EOL, and no
+        # package here claims to support it.
+        default: '[18, 22, 24]'
+      codecov-node-version:
+        type: number
         required: false
-        default: 8.14.1
+        # Must name an entry of `node-version`, or coverage is never uploaded.
+        default: 24
       codecov-flags:
         type: string
+        required: false
+    secrets:
+      CODECOV_TOKEN:
         required: false
 jobs:
   verify:
@@ -25,12 +32,14 @@ jobs:
         os: ${{ fromJson(inputs.os) }}
         node-version: ${{ fromJson(inputs.node-version) }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v2
-        with:
-          version: ${{ inputs.pnpm-version }}
+      - uses: actions/checkout@v7
+
+      # pnpm version comes from `packageManager` in package.json. Pinning it here
+      # instead would silently disagree with the lockfile the repo resolves against.
+      - uses: pnpm/action-setup@v6
+
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
@@ -46,7 +55,8 @@ jobs:
         if: ${{ matrix.os != 'ubuntu-latest' }}
 
       - name: codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == 20
-        uses: codecov/codecov-action@v3
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == inputs.codecov-node-version
+        uses: codecov/codecov-action@v7
         with:
           flags: ${{ inputs.codecov-flags }}
+          token: ${{ secrets.CODECOV_TOKEN }}
