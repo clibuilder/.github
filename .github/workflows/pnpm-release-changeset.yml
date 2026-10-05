@@ -91,14 +91,15 @@ jobs:
 
       # changesets/action@v2 only runs against Changesets CLI v3 (it refuses v2), and
       # @v1 reads the v2 CLI's stdout. Pick by the caller's CLI major, so each repo
-      # moves to v3 on its own; drop the @v1 step once every caller has.
+      # moves to v3 on its own; drop the @v1 step once every caller has. Anything but
+      # an exact '3' (including a failed read) keeps the original @v1 path.
       - name: Detect Changesets CLI major
         id: cli
         # Read by path: v3's `exports` map does not expose package.json.
-        run: echo "major=$(node -p "require('./node_modules/@changesets/cli/package.json').version.split('.')[0]")" >> "$GITHUB_OUTPUT"
+        run: echo "major=$(node -p "require('./node_modules/@changesets/cli/package.json').version.split('.')[0]" || true)" >> "$GITHUB_OUTPUT"
 
       - name: Create Release Pull Request or Publish to npm
-        if: steps.cli.outputs.major == '2'
+        if: steps.cli.outputs.major != '3'
         id: changesets
         uses: changesets/action@v1
         with:
@@ -113,7 +114,7 @@ jobs:
       # so the app token goes here for the PR's checks to trigger. Published packages
       # are read from the CHANGESETS_OUTPUT file, which `pnpm run release` inherits.
       - name: Create Release Pull Request or Publish to npm
-        if: steps.cli.outputs.major != '2'
+        if: steps.cli.outputs.major == '3'
         id: changesets-v3
         uses: changesets/action@v2
         with:
