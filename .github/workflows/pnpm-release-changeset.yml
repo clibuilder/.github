@@ -47,7 +47,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     outputs:
-      published: ${{ steps.changesets.outputs.published }}
+      published: ${{ steps.changesets.outputs.published || steps.changesets-v3.outputs.published }}
     env:
       HAS_RELEASE_APP: ${{ secrets.RELEASE_APP_ID != '' && secrets.RELEASE_APP_PRIVATE_KEY != '' }}
     steps:
@@ -89,7 +89,17 @@ jobs:
 
       - run: pnpm build
 
+      # changesets/action@v2 only runs against Changesets CLI v3 (it refuses v2), and
+      # @v1 reads the v2 CLI's stdout. Pick by the caller's CLI major, so each repo
+      # moves to v3 on its own; drop the @v1 step once every caller has. Anything but
+      # an exact '3' (including a failed read) keeps the original @v1 path.
+      - name: Detect Changesets CLI major
+        id: cli
+        # Read by path: v3's `exports` map does not expose package.json.
+        run: echo "major=$(node -p "require('./node_modules/@changesets/cli/package.json').version.split('.')[0]" || true)" >> "$GITHUB_OUTPUT"
+
       - name: Create Release Pull Request or Publish to npm
+        if: steps.cli.outputs.major != '3'
         id: changesets
         uses: changesets/action@v1
         with:
@@ -98,3 +108,17 @@ jobs:
           publish: pnpm run release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      # v2 pushes the version commit and tags through the GitHub API with
+      # `github-token` (not the checkout's credentials, and not GITHUB_TOKEN from env),
+      # so the app token goes here for the PR's checks to trigger. Published packages
+      # are read from the CHANGESETS_OUTPUT file, which `pnpm run release` inherits.
+      - name: Create Release Pull Request or Publish to npm
+        if: steps.cli.outputs.major == '3'
+        id: changesets-v3
+        uses: changesets/action@v2
+        with:
+          github-token: ${{ steps.app-token.outputs.token || github.token }}
+          commit-message: 'chore: version packages'
+          version-script: pnpm run version
+          publish-script: pnpm run release
