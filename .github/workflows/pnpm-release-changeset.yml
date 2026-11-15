@@ -35,14 +35,6 @@ on:
         # Node versions manifest, which has intermittently returned a
         # non-array and failed the job with "manifest.filter is not a function".
         default: '24'
-    # Deprecated and ignored. Still declared so a caller that passes them keeps
-    # validating while it migrates; a called workflow rejects undeclared secrets.
-    # Remove once no caller passes them.
-    secrets:
-      RELEASE_APP_ID:
-        required: false
-      RELEASE_APP_PRIVATE_KEY:
-        required: false
     outputs:
       published:
         description: 'Whether the release was published'
