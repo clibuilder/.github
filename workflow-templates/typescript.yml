@@ -23,3 +23,6 @@ jobs:
       id-token: write
       contents: write
       pull-requests: write
+      # Approves the version PR's runs, which GitHub parks as action_required
+      # because github-actions[bot] pushed them.
+      actions: write
